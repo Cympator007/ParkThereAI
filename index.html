@@ -131,7 +131,7 @@
             margin-top: 5px;
             padding: 5px 10px;
             background-color: #004C94;
-            color: #FFFFFF; /* Změněno na bílou #FFFFFF */
+            color: #FFFFFF; /* Barva textu "Navigate" */
             text-align: center;
             text-decoration: none;
             border-radius: 4px;
@@ -162,7 +162,7 @@
         /* --- RESPONSIVNÍ DESIGN PRO MENŠÍ OBRAZOVKY --- */
         @media (max-width: 768px) {
             #main-content-area {
-                flex-direction: column; /* Na malých obrazovkách stackujeme pod sebou */
+                flex-direction: column; /* Na malých obrazovkách stackujeme pod sebe */
                 align-items: center; /* Vycentrujeme položky horizontálně */
             }
             #map-container,
@@ -246,22 +246,18 @@
                     return;
                 }
 
-                // Add distance to each parking slot and sort
+                // 1. Přidat vzdálenost ke všem parkovacím místům a seřadit je
                 const parkingDataWithDistance = parkingData.map(slot => {
                     const distance = calculateDistance(userLat, userLon, slot.coordsmap[0], slot.coordsmap[1]);
                     return { ...slot, distance: distance };
                 });
 
-                // Sort by distance (ascending)
+                // Seřadit podle vzdálenosti (vzestupně)
                 parkingDataWithDistance.sort((a, b) => a.distance - b.distance);
-
-                // Display only the top N nearest slots (e.g., 5 nearest)
-                const numberOfNearestSlotsToShow = 5;
-                const nearestParkingSlots = parkingDataWithDistance.slice(0, numberOfNearestSlotsToShow);
 
                 const latLngsForBounds = [];
 
-                // Add a marker for the user's location
+                // 2. Přidat marker pro polohu uživatele
                 const userMarker = L.marker([userLat, userLon], {
                     icon: L.divIcon({
                         className: 'user-location-marker',
@@ -273,21 +269,20 @@
                 userMarker.bindPopup("<b>Your Location</b>").openPopup();
                 latLngsForBounds.push([userLat, userLon]);
 
-
-                nearestParkingSlots.forEach(slot => {
+                // 3. Zobrazit VŠECHNA parkovací místa na mapě
+                parkingDataWithDistance.forEach(slot => { // Iterujeme přes VŠECHNA místa
                     const lat = slot.coordsmap[0];
                     const lon = slot.coordsmap[1];
                     const status = slot.status;
                     const slotIndex = slot.index + 1;
-                    const distanceKm = (slot.distance / 1000).toFixed(2); // Distance in kilometers
 
                     // Google Maps Navigation URL
                     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-                    // Determine if the link should be enabled or disabled
+                    // Určíme, zda má být odkaz povolen nebo zakázán
                     const isOccupied = (status === 'occupied');
-                    const linkHref = isOccupied ? '#' : googleMapsUrl; // If occupied, link to # (no action)
+                    const linkHref = isOccupied ? '#' : googleMapsUrl; // Pokud je obsazeno, odkazuje na '#' (nic nedělá)
                     const linkClass = isOccupied ? 'navigate-link disabled' : 'navigate-link';
-                    const linkTarget = isOccupied ? '' : '_blank'; // Do not open new tab if disabled
+                    const linkTarget = isOccupied ? '' : '_blank'; // Nezobrazí se v novém tabu, pokud je zakázáno
 
 
                     let markerClassName = status === 'free' ? 'parking-marker-free' : 'parking-marker-occupied';
@@ -303,10 +298,30 @@
                     marker.bindPopup(`
                         <b>Parking Slot ${slotIndex}</b><br>
                         Status: ${status.charAt(0).toUpperCase() + status.slice(1)}<br>
-                        Distance: ${distanceKm} km<br>
                         <a href="${linkHref}" target="${linkTarget}" class="${linkClass}">Navigate</a>
                     `);
-                    latLngsForBounds.push([lat, lon]);
+                    latLngsForBounds.push([lat, lon]); // Přidáme souřadnice všech markerů pro výpočet bounds
+                });
+
+                // 4. Zobrazit POUZE 5 nejbližších parkovacích míst v seznamu
+                const numberOfNearestSlotsToShowInList = 5;
+                const nearestParkingSlotsForList = parkingDataWithDistance.slice(0, numberOfNearestSlotsToShowInList);
+
+                nearestParkingSlotsForList.forEach(slot => { // Iterujeme pouze přes 5 nejbližších míst pro seznam
+                    const lat = slot.coordsmap[0];
+                    const lon = slot.coordsmap[1];
+                    const status = slot.status;
+                    const slotIndex = slot.index + 1;
+                    const distanceKm = (slot.distance / 1000).toFixed(2); // Vzdálenost v kilometrech
+
+                    // Google Maps Navigation URL
+                    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+                    // Určíme, zda má být odkaz povolen nebo zakázán (stejná logika jako pro markery)
+                    const isOccupied = (status === 'occupied');
+                    const linkHref = isOccupied ? '#' : googleMapsUrl;
+                    const linkClass = isOccupied ? 'navigate-link disabled' : 'navigate-link';
+                    const linkTarget = isOccupied ? '' : '_blank';
+
 
                     const slotCardDiv = document.createElement('div');
                     slotCardDiv.classList.add('parking-slot-card');
@@ -323,8 +338,9 @@
                     parkingListContainer.appendChild(slotCardDiv);
                 });
 
+
                 if (latLngsForBounds.length > 0) {
-                    map.fitBounds(latLngsForBounds, { padding: [50, 50] }); // Add some padding
+                    map.fitBounds(latLngsForBounds, { padding: [50, 50] }); // Přizpůsobí mapu tak, aby zahrnovala všechny markery
                 }
             }
 
