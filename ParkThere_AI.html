@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Park There AI</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f7f6; /* Světle šedé/téměř bílé pozadí */
+            color: #333333; /* Tmavě šedý text pro lepší čitelnost */
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            color: #004C94; /* Tmavší modrá pro nadpisy */
+        }
+
+        /* --- NOVÝ CONTAINER PRO MAPU A SEZNAM --- */
+        #main-content-area {
+            display: flex; /* Použijeme Flexbox */
+            flex-direction: row; /* Uspořádáme položky v řadě (vedle sebe) */
+            justify-content: center; /* Vycentrujeme obsah horizontálně */
+            align-items: flex-start; /* Zarovnáme položky na začátek (nahoru) vertikálně */
+            width: 90%; /* Celková šířka této sekce */
+            margin: 20px auto; /* Vycentrujeme celý hlavní obsah */
+            gap: 20px; /* Mezera mezi mapou a seznamem */
+        }
+        /* --- KONEC NOVÉHO CONTAINERU --- */
+
+        #map-container {
+            flex: 2; /* Mapa zabere 2 díly prostoru (např. 66%) */
+            height: 500px; /* Pevná výška mapy */
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            background-color: #ffffff;
+            /* Původní margin: 20px auto; je nyní řízen rodičovským Flexboxem */
+            margin: 0; /* Resetujeme margin */
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* --- NOVÁ SEKCE PRO SEZNAM A JEHO NÁZEV --- */
+        #parking-list-section {
+            flex: 1; /* Seznam zabere 1 díl prostoru (např. 33%) */
+            display: flex;
+            flex-direction: column; /* Uspořádáme nadpis a seznam vertikálně uvnitř této sekce */
+            background-color: #ffffff; /* Bílé pozadí pro celou sekci seznamu */
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            padding: 20px; /* Přidáme vnitřní odsazení */
+            overflow-y: auto; /* Povolíme vertikální scrollování, pokud je seznam dlouhý */
+            max-height: 500px; /* Omezíme výšku seznamu na výšku mapy */
+            /* Původní margin: 20px auto; je nyní řízen rodičovským Flexboxem */
+            margin: 0; /* Resetujeme margin */
+        }
+
+        #parking-list-section h1 { /* Styl pro nadpis uvnitř sekce seznamu */
+            margin-top: 0; /* Odstraníme horní margin */
+            margin-bottom: 15px; /* Přidáme mezeru pod nadpis */
+            color: #004C94; /* Zachováme akcentní barvu */
+            text-align: center;
+        }
+        /* --- KONEC NOVÉ SEKCIE PRO SEZNAM --- */
+
+        #parking-list {
+            display: grid; /* Zachováme grid pro jednotlivé karty */
+            grid-template-columns: 1fr; /* Karty pod sebou v jednom sloupci */
+            gap: 15px;
+            /* Původní padding a margin jsou nyní na rodičovské #parking-list-section */
+            padding: 0; /* Odstraníme vnitřní odsazení */
+            margin: 0; /* Odstraníme vnější odsazení */
+            background-color: transparent; /* Pozadí je nyní na rodiči */
+            box-shadow: none; /* Stín je nyní na rodiči */
+        }
+        .parking-slot-card {
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+        .parking-slot-card.free {
+            background-color: #d4edda;
+            border: 1px solid #24ba0d;
+        }
+        .parking-slot-card.occupied {
+            background-color: #f8d7da;
+            border: 1px solid #dc3545;
+        }
+        .parking-slot-card span {
+            display: block;
+            margin-top: 5px;
+            font-size: 0.8em;
+        }
+
+        /* --- CSS FOR COLORED MARKERS --- */
+        .leaflet-div-icon {
+            background-color: transparent;
+            border: none;
+        }
+
+        .parking-marker-free {
+            background-color: #24ba0d;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            opacity: 0.9;
+        }
+
+        .parking-marker-occupied {
+            background-color: #dc3545;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            opacity: 0.9;
+        }
+        .navigate-link {
+            display: block;
+            margin-top: 5px;
+            padding: 5px 10px;
+            background-color: #004C94;
+            color: #FFFFFF; /* Změněno na bílou #FFFFFF */
+            text-align: center;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: normal;
+            font-size: 0.9em;
+        }
+        /* Styl pro ztmavení navigačního tlačítka, pokud je neaktivní */
+        .navigate-link.disabled {
+            background-color: #cccccc; /* Šedá barva pro neaktivní tlačítko */
+            cursor: not-allowed; /* Ikona zakázaného kurzoru */
+            pointer-events: none; /* Zabrání kliknutí na odkaz */
+            color: #666666; /* Tmavší text pro neaktivní */
+        }
+        .navigate-link:hover {
+            background-color: #004C94; /* Zachováno pro aktivní odkaz */
+        }
+        .navigate-link.disabled:hover { /* Zajištění, že se neaktivní tlačítko nemění při najetí myší */
+            background-color: #cccccc;
+        }
+
+
+        #loading-message {
+            color: #666;
+            grid-column: 1 / -1; /* Zajistí, že zpráva bude přes celou šířku gridu */
+            text-align: center;
+        }
+
+        /* --- RESPONSIVNÍ DESIGN PRO MENŠÍ OBRAZOVKY --- */
+        @media (max-width: 768px) {
+            #main-content-area {
+                flex-direction: column; /* Na malých obrazovkách stackujeme pod sebou */
+                align-items: center; /* Vycentrujeme položky horizontálně */
+            }
+            #map-container,
+            #parking-list-section {
+                width: 100%; /* Zabere plnou šířku */
+                max-width: none;
+                margin: 0 0 20px 0; /* Mezera mezi sekcemi */
+            }
+            #map-container {
+                height: 300px; /* Upravíme výšku mapy pro mobily */
+            }
+            #parking-list-section {
+                max-height: 400px; /* Upravíme max. výšku seznamu pro mobily */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ParkThere AI</h1>
+
+    <div id="main-content-area">
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+
+        <div id="parking-list-section">
+            <h1>Parking Slots List</h1>
+            <div id="parking-list">
+                <p id="loading-message">Getting your location and loading parking data...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const parkingListContainer = document.getElementById('parking-list');
+            const loadingMessage = document.getElementById('loading-message');
+            const apiUrl = 'http://192.168.0.114:5000/data'; // Your API URL
+
+            // Initialize the map with a default center (e.g., Pilsen)
+            const defaultCenter = [49.747, 13.377];
+            const map = L.map('map').setView(defaultCenter, 15);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Function to calculate distance between two lat/lon points (Haversine formula)
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371e3; // metres
+                const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+                const φ2 = lat2 * Math.PI/180;
+                const Δφ = (lat2-lat1) * Math.PI/180;
+                const Δλ = (lon2-lon1) * Math.PI/180;
+
+                const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                          Math.cos(φ1) * Math.cos(φ2) *
+                          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+                const d = R * c; // in metres
+                return d; // distance in meters
+            }
+
+            // Function to render parking data on map and list
+            function renderParkingData(parkingData, userLat, userLon) {
+                // Clear existing markers if any (important if re-rendering)
+                map.eachLayer(function (layer) {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+                parkingListContainer.innerHTML = ''; // Clear existing list items
+
+                if (parkingData.length === 0) {
+                    parkingListContainer.innerHTML = '<p style="color: #666; grid-column: 1 / -1; text-align: center;">No parking data available.</p>';
+                    return;
+                }
+
+                // Add distance to each parking slot and sort
+                const parkingDataWithDistance = parkingData.map(slot => {
+                    const distance = calculateDistance(userLat, userLon, slot.coordsmap[0], slot.coordsmap[1]);
+                    return { ...slot, distance: distance };
+                });
+
+                // Sort by distance (ascending)
+                parkingDataWithDistance.sort((a, b) => a.distance - b.distance);
+
+                // Display only the top N nearest slots (e.g., 5 nearest)
+                const numberOfNearestSlotsToShow = 5;
+                const nearestParkingSlots = parkingDataWithDistance.slice(0, numberOfNearestSlotsToShow);
+
+                const latLngsForBounds = [];
+
+                // Add a marker for the user's location
+                const userMarker = L.marker([userLat, userLon], {
+                    icon: L.divIcon({
+                        className: 'user-location-marker',
+                        html: '<div style="background-color: blue; border-radius: 50%; width: 20px; height: 20px; border: 2px solid white; opacity: 0.9;"></div>',
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    })
+                }).addTo(map);
+                userMarker.bindPopup("<b>Your Location</b>").openPopup();
+                latLngsForBounds.push([userLat, userLon]);
+
+
+                nearestParkingSlots.forEach(slot => {
+                    const lat = slot.coordsmap[0];
+                    const lon = slot.coordsmap[1];
+                    const status = slot.status;
+                    const slotIndex = slot.index + 1;
+                    const distanceKm = (slot.distance / 1000).toFixed(2); // Distance in kilometers
+
+                    // Google Maps Navigation URL
+                    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+                    // Determine if the link should be enabled or disabled
+                    const isOccupied = (status === 'occupied');
+                    const linkHref = isOccupied ? '#' : googleMapsUrl; // If occupied, link to # (no action)
+                    const linkClass = isOccupied ? 'navigate-link disabled' : 'navigate-link';
+                    const linkTarget = isOccupied ? '' : '_blank'; // Do not open new tab if disabled
+
+
+                    let markerClassName = status === 'free' ? 'parking-marker-free' : 'parking-marker-occupied';
+
+                    const customIcon = L.divIcon({
+                        className: markerClassName,
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+
+                    const marker = L.marker([lat, lon], { icon: customIcon }).addTo(map);
+
+                    marker.bindPopup(`
+                        <b>Parking Slot ${slotIndex}</b><br>
+                        Status: ${status.charAt(0).toUpperCase() + status.slice(1)}<br>
+                        Distance: ${distanceKm} km<br>
+                        <a href="${linkHref}" target="${linkTarget}" class="${linkClass}">Navigate</a>
+                    `);
+                    latLngsForBounds.push([lat, lon]);
+
+                    const slotCardDiv = document.createElement('div');
+                    slotCardDiv.classList.add('parking-slot-card');
+                    slotCardDiv.classList.add(status);
+
+                    slotCardDiv.innerHTML = `
+                        <div>Slot ${slotIndex}</div>
+                        <span>Status: ${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+                        <span>Distance: ${distanceKm} km</span>
+                        <span>Lat: ${lat.toFixed(6)}</span>
+                        <span>Lon: ${lon.toFixed(6)}</span>
+                        <a href="${linkHref}" target="${linkTarget}" class="${linkClass}">Navigate</a>
+                    `;
+                    parkingListContainer.appendChild(slotCardDiv);
+                });
+
+                if (latLngsForBounds.length > 0) {
+                    map.fitBounds(latLngsForBounds, { padding: [50, 50] }); // Add some padding
+                }
+            }
+
+            // Main function to fetch data and get user location
+            async function getUserLocationAndRender() {
+                try {
+                    // 1. Get user's location
+                    const position = await new Promise((resolve, reject) => {
+                        // Added enableHighAccuracy, timeout, maximumAge for better location accuracy
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+                    });
+                    const userLat = position.coords.latitude;
+                    const userLon = position.coords.longitude;
+
+                    // Update map view to user's location
+                    map.setView([userLat, userLon], 15);
+
+                    // 2. Fetch parking data
+                    const response = await fetch(apiUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const parkingData = await response.json();
+
+                    // 3. Render data based on proximity
+                    renderParkingData(parkingData, userLat, userLon);
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    let errorMessage = 'Failed to load parking data or get your location.';
+                    if (error.code === error.PERMISSION_DENIED) {
+                        errorMessage = 'Location access denied. Please allow location access to find nearest parking.';
+                    } else if (error.message.includes('HTTP error')) {
+                        errorMessage = `Error fetching data: ${error.message}. Check server and CORS settings.`;
+                    }
+                    parkingListContainer.innerHTML = `<p style="color: red; grid-column: 1 / -1; text-align: center;">${errorMessage}</p>`;
+                    // If location access is denied, still try to load data without proximity
+                    // This part is optional, depending on desired fallback behavior
+                    try {
+                         const response = await fetch(apiUrl);
+                         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                         const parkingData = await response.json();
+                         // Render all data if location is not available, centered on default location
+                         renderParkingData(parkingData, defaultCenter[0], defaultCenter[1]);
+                         parkingListContainer.innerHTML += `<p style="color: orange; grid-column: 1 / -1; text-align: center;">Displaying all parking slots as location access was denied.</p>`;
+                    } catch (fallbackError) {
+                        console.error('Fallback fetch failed:', fallbackError);
+                        parkingListContainer.innerHTML = `<p style="color: red; grid-column: 1 / -1; text-align: center;">Failed to load any parking data.</p>`;
+                    }
+                }
+            }
+
+            // Start the process
+            getUserLocationAndRender();
+        });
+    </script>
+</body>
+</html>
